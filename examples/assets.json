@@ -1,0 +1,26 @@
+[
+  {
+    "id": "your-first-frame-id",
+    "name": "精华液滴落前",
+    "role": "首帧",
+    "domain": "电商",
+    "url": "https://your-host.example/first.jpg",
+    "caption": "滴管位于手背上方，尖端挂着一滴透明精华液。",
+    "tags": ["精华液", "滴落"],
+    "groupId": "your-clip-001",
+    "source": "填写原始数据集ID及许可",
+    "verified": false
+  },
+  {
+    "id": "your-last-frame-id",
+    "name": "精华液滴落后",
+    "role": "尾帧",
+    "domain": "电商",
+    "url": "https://your-host.example/last.jpg",
+    "caption": "液滴已经落在手背上，形成一小片液体。",
+    "tags": ["精华液", "滴落"],
+    "groupId": "your-clip-001",
+    "source": "填写原始数据集ID及许可",
+    "verified": false
+  }
+]

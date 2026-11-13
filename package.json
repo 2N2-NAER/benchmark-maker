@@ -1,0 +1,13 @@
+{
+  "name": "benchmark-foundry",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Badcase-driven benchmark synthesis workspace for drama and ecommerce video generation",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node server.mjs",
+    "dev": "node server.mjs",
+    "check": "node --check server.mjs && node --check public/app.js && node --check public/core.js",
+    "test": "node --test tests/*.test.cjs"
+  }
+}
