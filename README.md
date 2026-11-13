@@ -1,87 +1,169 @@
-# Benchmark Foundry
+# Benchmark Maker · AI 专项评估集合成管线
 
-面向漫剧和电商视频生成的 Badcase 专项评估集合成工作台。输入能力问题，编辑覆盖方案，匹配素材，生成 Prompt 与 checkpoint，经审核导出 CSV/JSON。
+输入问题文档，让 AI 拆解能力、生成检索词、检索带 caption 的素材库，并合成漫剧/电商 benchmark。**主入口为 MCP 插件或 Python CLI，运行不需要前端。**
 
-## 快速启动
+AI 负责问题理解、任务规划、素材选择、Prompt 和 checkpoint。程序负责文档解析、素材检索、引用校验、进度保存和导出。保留的 `public/` 与 Node 服务只是旧版可选预览，不参与核心管线。
 
-需要 Node.js 20 或更新版本，无第三方依赖，无需 npm install。
+## 方式一：AI 自身作为合成主体（MCP，推荐）
 
-```bash
-npm start
-```
+需要 Python 3.10+，标准库实现，无需 pip install，也无需额外配置模型 Key。由宿主 AI 使用自己的推理能力调用以下工具：
 
-打开 http://localhost:4173 。Linux/macOS 可通过 `PORT=8080 npm start` 修改端口；Windows PowerShell 使用 `$env:PORT=8080; npm start`。
+1. `read_problem_document`：读取问题文档。
+2. 宿主 AI 根据文档拆解任务，生成覆盖矩阵及中英文检索词。
+3. `search_materials`：按任务查询本地带 caption 的素材索引，返回真实素材、来源和缺失用途。
+4. 宿主 AI 根据检索结果选择素材，合成不同的用户输入 Prompt、参考绑定和 1～3 条 checkpoint。
+5. `export_benchmark`：校验引用、首尾帧分组、数量、重复 Prompt 和参数，输出候选 benchmark。
 
-```bash
-npm run check
-npm test
-```
-
-## Docker
-
-```bash
-docker build -t benchmark-foundry .
-docker run --rm -p 4173:4173 benchmark-foundry
-```
-
-## 使用流程
-
-1. 在「专项合成」输入 Badcase，选择业务、Case 数、时长、画幅和输入模式。
-2. 生成并编辑覆盖方案。规则模式覆盖流体、交互、一致性和镜头；其他问题可手工编辑或连接大模型。
-3. 在「素材库」导入 JSON/CSV，或手工添加真实媒体 URL、caption、用途和来源。
-4. 回到覆盖方案生成候选集。在「候选评估集」补齐绑定、编辑 Prompt/checkpoint、核验素材后审核。
-5. 导出候选 CSV，或仅导出审核通过且无结构性阻断的 CSV。JSON 包含素材索引及 Case 元数据。
-6. 使用「备份项目」保存浏览器数据，换浏览器或更换部署地址后用「恢复项目」导入。
-
-## 素材格式
-
-见 [examples/assets.json](examples/assets.json)。其中 URL 为明确占位符，必须替换为真实素材后使用。
-
-- 必填：`role`、`url`、`caption`。
-- `role`：角色图、商品图、场景图、道具图、关键帧、首帧、尾帧、参考视频、参考音频。
-- `domain`：漫剧、电商、通用。
-- `groupId`：首尾帧必须填写同组标识；标识相同只表示声明了关联，仍需人工验证连续性。
-- `verified`：默认 false，查看素材并核验内容后再改为 true。
-- `source`：记录数据集名称、原始ID和许可。
-
-导入会拒绝非法用途、缺少 caption 或非 HTTP(S) URL 的记录，并报告数量。素材库只保存索引，不上传或托管媒体。
-
-## 大模型接口
-
-在「接口与配置」填写完整的 Chat Completions URL、模型名称和当前会话的 API Key，可执行覆盖方案拆解和单 Case 改写。可填写真实用户 Prompt 样例以指导风格。请求从浏览器直连所填服务，该服务必须允许跨域访问。API Key 不写入 localStorage 或项目备份；刷新页面后需重新输入。
-
-## 素材检索接口
-
-配置自有检索服务 URL，工作台发送：
+在支持本地 stdio MCP 的 AI 客户端中添加以下配置。将路径替换为项目克隆后的绝对路径；不依赖客户端工作目录。
 
 ```json
-{"query":"流体效果差", "domain":"双业务", "limit":100}
+{
+  "mcpServers": {
+    "benchmark-maker": {
+      "command": "python3",
+      "args": ["/absolute/path/to/benchmark-maker/run_mcp.py"]
+    }
+  }
+}
 ```
 
-返回素材数组或 `{"assets": [...]}`，素材字段与导入格式一致。当前无内置数据集爬取器、向量检索服务或服务端凭据代理。
+这是可接入 MCP 客户端的工具服务，不代表已经安装成当前 ChatGPT 的云端插件。
 
-## 已实现和边界
+配置后可以对 AI 说：
 
-已实现：规则覆盖方案、素材索引管理、按 caption 的基础匹配、候选合成、单 Case 编辑与模型改写、素材核验标记、首尾帧组检查、引用检查、审核导出和浏览器备份。
+> 使用 benchmark-maker，读取 /data/badcase.md，针对漫剧和电商生成 60 条流体专项候选 benchmark。素材库为 /data/assets.json。覆盖眼泪、口水、海水和精华液，保留首帧、首尾帧、对象参考三种输入方式。根据素材 caption 选择合理组合，不够的部分标记缺失，不虚构素材。输出到 /data/runs/fluid-001。
 
-规则模板生成的同类任务可能相似，当前不代表严格采样的真实用户分布。checkpoint 是候选检查点，需要人工校准。匹配 caption 不等于素材内容正确；“无结构性阻断”也不等于已检查媒体可访问性或任务质量。
+## 方式二：配置模型 API，全流程命令行运行
 
-尚未实现：数据集自动下载、视频切片与提帧、自动音视频理解、跨素材身份验证、向量数据库、生成模型批量试跑、自动评分、多用户云端数据同步。素材链接、许可与实际内容需自行核验。
+```bash
+export BM_LLM_ENDPOINT='https://your-gateway.example/v1/chat/completions'
+export BM_LLM_MODEL='your-model'
+export BM_LLM_API_KEY='your-key'
 
-## 数据与部署
+python3 -m benchmark_maker run examples/problem.md \
+  --assets /data/assets.json \
+  --out runs/fluid-001 \
+  --count 60 --domain 双业务
+```
 
-项目是静态前端，加一个零依赖静态文件服务。数据保存在当前浏览器 origin 的 localStorage，不保存到 Node 服务。`/healthz` 用于运行检测。`public/` 可部署到任意静态托管服务。Node 服务仅开放静态文件和健康检查，不包含用户认证；部署到外部网络时需自行按场景添加访问控制。
+Key 通过环境变量传递，不保存到运行产物。`.env.example` 仅为变量说明，程序不自动加载 `.env`。模型端点接收问题文档、检索到的 caption 与素材元数据；仅配置你认可的服务。
 
-## 目录
+支持 `--domain 漫剧` / `电商` / `双业务`。使用 `--examples /data/user-prompts.md` 加入真实用户输入样例以指导表达方式。运行失败后保留已完成批次：
+
+```bash
+python3 -m benchmark_maker run examples/problem.md \
+  --assets /data/assets.json --out runs/fluid-001 \
+  --count 60 --domain 双业务 --resume
+```
+
+恢复要求文档、素材、参数、样例、模型和端点一致。改变输入后应使用新目录。模型无效 JSON 最多修复一次；网络失败不自动重复付费请求。语义/结构不合格的结果保存为候选或报错，不悄悄改成规则模板。
+
+## 分步命令（适合脚本、Agent 和人工接管）
+
+```bash
+python3 -m benchmark_maker extract /data/badcase.docx --out runs/source.json
+# AI 阅读 source.json 后写 plan.json
+python3 -m benchmark_maker search --plan runs/plan.json \
+  --assets /data/assets.json --out runs/retrieval.json
+# AI 阅读 retrieval.json 后写 cases.json
+python3 -m benchmark_maker finalize --plan runs/plan.json \
+  --assets /data/assets.json --cases runs/cases.json --out runs/final
+```
+
+`finalize` 在有结构阻断或数量不符时退出码为 2，但仍保留报告；正常运行不代表候选已完成人工验收。
+
+文档支持 UTF-8 的 Markdown、TXT、JSON、JSONL、CSV、DOCX；PDF 需要系统安装 Poppler 的 `pdftotext`。扫描 PDF 需先 OCR。单文档限制 50 MiB/16 万字符，超出明确报错，不静默截断。
+
+## 数据契约
+
+素材库支持 JSON、JSONL、CSV。JSON 可为数组或 `{"assets": [...]}`。见 `examples/assets.json`，示例中的 URL 是占位符，需替换为真实媒体。
+
+```json
+{
+  "id": "serum-first-001",
+  "role": "首帧",
+  "domain": "电商",
+  "url": "https://your-media.example/first.jpg",
+  "caption": "滴管悬在手背上方，尖端挂着一滴透明精华液。",
+  "tags": ["精华液", "serum", "drop"],
+  "groupId": "serum-clip-001",
+  "source": "数据集名称、原始ID及使用许可",
+  "verified": false
+}
+```
+
+用途：角色图、商品图、场景图、道具图、关键帧、首帧、尾帧、参考视频、参考音频。`groupId` 声明首尾帧属于同一连续片段；同组不等于已验证可过渡。`verified` 只接受 true 或 CSV 的 `true`，默认未核验。
+
+计划格式：
+
+```json
+{"summary":"流体连续性问题","tasks":[{
+  "id":"T01","name":"精华液从滴管滴落到手背","domain":"电商",
+  "ability":"流体连续性与接触","mode":"首尾帧",
+  "queries":["精华液 滴落 手背", "serum drop hand"],
+  "count":1,"difficulty":"基础"
+}]}
+```
+
+Case 格式：
+
+```json
+{"cases":[{
+  "id":"C01","task_id":"T01","domain":"电商","mode":"首尾帧",
+  "type":"用户场景","duration":8,"aspect":"16:9",
+  "prompt":"以{pic-01}为首帧、{pic-02}为尾帧，固定近景，精华液从滴管滴到手背。",
+  "bindings":[
+    {"asset_id":"serum-first-001","ref":"pic-01","purpose":"首帧，锁定滴落前状态"},
+    {"asset_id":"serum-last-001","ref":"pic-02","purpose":"尾帧，锁定液滴接触手背后的状态"}
+  ],
+  "checkpoints":["液滴从滴管下落并接触手背","运动过程中液滴没有突然消失"]
+}]}
+```
+
+AI 只能引用检索返回的素材 ID，URL 由程序解析填入导出表。缺失素材不会被自动造图或伪造 URL。可以传入多个角色、商品、场景、道具、关键帧和声音绑定。
+
+## 输出与可追溯性
+
+完整运行输出：
 
 ```text
-public/           页面、样式、前端与合成规则
-server.mjs        独立静态文件服务
-examples/         素材字段示例
- tests/           核心逻辑和服务测试
-.github/workflows/ GitHub CI
+manifest.json          输入指纹、运行状态及模型
+01_document.json       文档提取结果
+02_plan.json           AI 覆盖方案
+03_retrieval.json      每个任务的素材候选、相关性和缺口
+batches/               分任务 AI 合成结果，支持恢复
+benchmark.json         候选 Case、素材索引及来源信息
+benchmark.csv          一素材一列，保留完整 Prompt 与 checkpoint
+validation.json        阻断问题、未核验警告及数量检查
 ```
+
+所有结果始终标为候选；不会把没有结构性错误的 Case 当作正式通过的评估集。源文档、用户样例和中间产物可能包含业务数据，`runs/` 已默认忽略，勿提交到仓库。
+
+## 当前边界
+
+- 检索已实现本地 caption/tag 的中英文 token 匹配，AI 生成多语言检索词并选择素材；不是向量检索服务，也不是公网数据集爬虫。
+- 不自动下载素材、不检查远端 URL、不自动提帧/切片，也不声称读取过媒体像素。首尾帧、关键帧和商品图需预先入库。
+- 文档/字幕/caption 都作为数据处理。caption 可能错误，人物身份、商品一致性和首尾帧过渡仍需核验。
+- checkpoint 的可观察性、难度、业务分布与流体物理是否合理，需要人工校准；不包含视频生成试跑和评分。
+
+## 测试与 Docker
+
+```bash
+python3 -m unittest discover -s tests -p 'test_*.py' -v
+# 旧前端的可选检查
+npm run check && npm test
+
+docker build -t benchmark-maker .
+# MCP stdio（保持stdin打开）
+docker run --rm -i -v /data:/data benchmark-maker mcp
+# API 自动运行
+# /data目录需对容器app用户可写
+docker run --rm --env-file /secure/model.env -v /data:/data benchmark-maker \
+  run /data/badcase.md --assets /data/assets.json --out /data/runs/fluid-001
+```
+
+Docker 默认主入口为 Python 管线。Node 前端预览仍可通过 `npm start` 启动，但核心合成不依赖它。
 
 ## 许可
 
-本项目尚未指定开源许可证。不要将第三方数据集、实际媒体、用户任务、API Key 或个人数据提交到仓库。素材数据的授权与应用代码分别管理。
+项目尚未指定开源许可证；公开可读不自动授予再许可。素材数据遵循其各自授权，不随代码分发。
